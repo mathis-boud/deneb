@@ -11,7 +11,9 @@
   "license": "UNLICENSED",
   "dependencies": {
     "better-sqlite3": "^12.8.0",
+    "canvas": "^3.2.3",
     "dayjs": "^1.11.20",
-    "discord.js": "^14.26.2"
+    "discord.js": "^14.26.2",
+    "figlet": "^1.11.0"
   }
 }
