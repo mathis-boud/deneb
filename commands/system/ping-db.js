@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const db = require('better-sqlite3')('reminders.sqlite');
+const db = require('better-sqlite3')('database.sqlite');
 
 module.exports = {
     data: new SlashCommandBuilder()

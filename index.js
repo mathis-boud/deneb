@@ -5,9 +5,9 @@ const { token } = require('./config.json');
 
 // --- BASE DE DONNÉES ---
 const Database = require('better-sqlite3');
-const db = new Database('reminders.sqlite');
+const db = new Database('database.sqlite'); // Un seul fichier pour tout
 
-// Initialisation de la table pour les rappels séquentiels
+// Initialisation de la table des rappels
 db.prepare(`
     CREATE TABLE IF NOT EXISTS reminders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,14 +19,19 @@ db.prepare(`
     )
 `).run();
 
+// Initialisation de la table de leveling
+db.prepare("CREATE TABLE IF NOT EXISTS levels (userId TEXT PRIMARY KEY, xp INTEGER, level INTEGER)").run();
+
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent 
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
     ] 
 });
 
+const xpCooldowns = new Set();
 client.commands = new Collection();
 
 // --- CHARGEMENT DES COMMANDES ---
@@ -87,21 +92,48 @@ client.once(Events.ClientReady, (readyClient) => {
 
 // --- GESTION DES MESSAGES (PRÉFIXE +) ---
 client.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot || !message.guild) return;
+
     const prefix = "+";
-    if (message.author.bot || !message.content.startsWith(prefix)) return;
-
-    const args = message.content.slice(prefix.length).trim().split(/ +/);
-    const commandName = args.shift().toLowerCase();
-
-    const command = client.commands.get(commandName);
-    if (!command) return;
-
-    try {
-        await command.execute(message, args);
-    } catch (error) {
-        console.error(error);
-        message.reply('Erreur lors de l\'exécution de la commande à préfixe.');
+    
+    // 1. LOGIQUE DES COMMANDES (+ ou Slash)
+    if (message.content.startsWith(prefix)) {
+        const args = message.content.slice(prefix.length).trim().split(/ +/);
+        const commandName = args.shift().toLowerCase();
+        const command = client.commands.get(commandName);
+        
+        if (command) {
+            try { await command.execute(message, args); } 
+            catch (e) { console.error(e); message.reply('Erreur commande.'); }
+        }
+        return; // On s'arrête ici si c'était une commande (pas d'XP)
     }
+
+    // 2. LOGIQUE DU LEVELING (Si ce n'est pas une commande)
+    if (xpCooldowns.has(message.author.id)) return;
+
+    let user = db.prepare("SELECT * FROM levels WHERE userId = ?").get(message.author.id);
+    if (!user) {
+        db.prepare("INSERT INTO levels (userId, xp, level) VALUES (?, 0, 1)").run(message.author.id);
+        user = { xp: 0, level: 1 };
+    }
+
+    const xpGagne = Math.floor(Math.random() * 11) + 15;
+    let newXp = user.xp + xpGagne;
+    let newLevel = user.level;
+    const xpNecessaire = newLevel * 1000;
+
+    if (newXp >= xpNecessaire) {
+        newLevel++;
+        newXp = 0;
+        message.reply(`🎉 Bravo <@${message.author.id}>, tu es niveau **${newLevel}** !`);
+    }
+
+    db.prepare("UPDATE levels SET xp = ?, level = ? WHERE userId = ?").run(newXp, newLevel, message.author.id);
+
+    // Ajout du cooldown d'une minute
+    xpCooldowns.add(message.author.id);
+    setTimeout(() => xpCooldowns.delete(message.author.id), 60000);
 });
 
 // --- GESTION DES INTERACTIONS (SLASH) ---

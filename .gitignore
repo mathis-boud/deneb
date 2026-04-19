@@ -1,4 +1,4 @@
 node_modules/
 config.json
-reminders.sqlite
+database.sqlite
 .env
